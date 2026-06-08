@@ -1,0 +1,8 @@
+{
+  "weights": "huggingface",
+  "repo_id": "fbarbosa1/pi05-nvidia-av-generalize-012000",
+  "filename": "model.safetensors",
+  "checkpoint_step": 12000,
+  "training_run": "pi05_nvidia_smoke_generalize_20260519_212805",
+  "note": "model.safetensors is ~8.7GB (over GitHub 2GB LFS limit). Download from Hugging Face; config and processors are in this repo."
+}

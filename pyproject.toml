@@ -1,0 +1,24 @@
+[project]
+name = "pi-drive"
+version = "0.1.0"
+description = "Self Driving Golf Cart"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.4.4",
+    "odrive>=0.6.10.post0",
+    "opencv-python>=4.13.0.92",
+    "pygame>=2.6.1",
+    "pynmea2>=1.19.0",
+    "pyserial>=3.5",
+    "torch>=2.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["pi05/rlt/tests"]

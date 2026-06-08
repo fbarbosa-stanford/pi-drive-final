@@ -1,0 +1,45 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyc
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment / secrets
+.env
+.env.*
+
+# Local artifacts
+camera_snapshots/
+.DS_Store
+.wandb/
+modal/.modal/
+
+# Large media (training/viz outputs)
+*.mp4
+simlingo/special/
+simlingo/waypoint_output/
+viz_images/
+viz/
+viz_local/
+
+# Model checkpoints (regenerable; track published ckpt via LFS — see .gitattributes)
+/pretrained_model/
+/downloaded_ckpt/
+*.safetensors
+!checkpoints/pi05_nvidia_generalize_012000/**/*.safetensors
+checkpoints/pi05_nvidia_generalize_012000/pretrained_model/model.safetensors
+vol/
+caddy_lerobot/
+caddy_zero_shot_out/
+caddy_zero_shot_full/
+inference_batch_val/
+inference_output/
+checkpoints/bc_hf/
+checkpoints/pi05_driving/
+labels/

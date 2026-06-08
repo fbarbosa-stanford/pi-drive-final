@@ -1,0 +1,16 @@
+[project]
+name = "simlingo-sandbox"
+version = "0.0.1"
+description = "Offline SimLingo inference + sanity checks on Modal."
+readme = "README.md"
+requires-python = ">=3.10"
+# The heavy GPU/ML deps live inside the Modal image (see modal_app.py).
+# Locally we only need the Modal client to ship code to the cloud.
+dependencies = [
+    "modal>=0.66.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.5.0",
+]

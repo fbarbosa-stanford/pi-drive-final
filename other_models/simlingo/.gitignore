@@ -1,0 +1,11 @@
+outputs/
+__pycache__/
+*.py[oc]
+.venv/
+.modal_cache/
+*.png
+*.jpg
+*.jpeg
+*.tar.gz
+*.pt
+*.ckpt

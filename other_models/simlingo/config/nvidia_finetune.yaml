@@ -1,0 +1,165 @@
+# SimLingo fine-tuning on NVIDIA PhysicalAI-AV real-world data
+#
+# This config is optimized for warm-starting from SimLingo and fine-tuning
+# with LoRA on real-world driving data.
+#
+# Usage:
+#   modal run modal_training.py::train --config config/nvidia_finetune.yaml
+
+model:
+  # Warm start from pretrained SimLingo
+  base: "RenzKa/simlingo"
+  backbone: "OpenGVLab/InternVL2-1B"
+
+  # Prediction heads
+  num_waypoints: 11
+  waypoint_spacing_s: 0.25
+  route_points: 20
+  route_spacing_m: 1.0
+
+training:
+  # Batch configuration — sized for H100:8.
+  # Per-rank bs=24, 8 ranks, grad_accum=4 → effective batch = 24*8*4 = 768.
+  # This matches the convergence-per-step of the prior H100:4 setup (48*4*4=768)
+  # while halving wallclock by doubling data-parallel ranks.
+  batch_size: 24
+  gradient_accumulation_steps: 4
+  effective_batch_size: 768  # 24 * 8 * 4 = 768
+
+  # Training duration
+  epochs: 20
+  max_steps: null  # If set, overrides epochs
+
+  # Optimizer settings (matching SteerVLA: 3e-5)
+  learning_rate: 3.0e-5
+  lr_scheduler: cosine
+  warmup_ratio: 0.05
+  warmup_steps: null  # If set, overrides warmup_ratio
+
+  optimizer: adamw
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+  # Precision and memory
+  precision: bf16
+  gradient_checkpointing: false  # Disabled due to LoRA hook compatibility issues
+  max_grad_norm: 1.0
+
+  # Tier A vectorization: single batched forward+backward per step instead of
+  # per-sample loop. Steady-state profile (2026-05-18, H100:4, bs=48):
+  #   vec   step ~22.1s (image_prep 1.7 + forward 17.2 + backward 3.1)
+  #   unvec step ~25.3s (image_prep 1.4 + forward 16.7 + backward 6.9)
+  # Vec backward is 55% faster (one batched bwd vs N per-sample bwds), more than
+  # offsetting a slight forward regression. Numerical equivalence confirmed
+  # (val/loss delta 0.25% on smoke). max_num=1 is forced for clean stacking;
+  # see Phase 2 follow-up for variable-patch fix if accuracy plateaus.
+  vectorized: true
+
+  # Evaluation — denser eval/save cadence so early-stop has tight resume granularity.
+  eval_steps: 250
+  save_steps: 250
+  logging_steps: 10
+
+  # Early stopping: monitor val/loss, halt if no improvement after `patience`
+  # evaluations. Combined with frequent checkpointing, you can also manually
+  # `modal app stop <id>` at any time and resume from the latest checkpoint.
+  early_stopping: true
+  early_stopping_patience: 3
+  early_stopping_metric: val/loss
+  early_stopping_min_delta: 1.0e-4
+
+lora:
+  enabled: true
+  rank: 32
+  alpha: 64
+  dropout: 0.1
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+  # Optional: fine-tune vision encoder as well
+  vision_lora: false
+  vision_rank: 16
+
+data:
+  # Paths inside the Modal container (mounted from simlingo-nvidia-data volume).
+  train_dir: "/nvidia_data/extracted"
+  val_dir: null    # null = use val split from train_dir via train_val_split.json
+  val_split: 0.1
+
+  # Image preprocessing
+  image_size: [448, 448]  # InternVL2 input size
+  crop_bottom: false      # NVIDIA cameras are roof-mounted
+
+  # Camera configuration (NVIDIA front wide 120° FOV)
+  fov_deg: 120.0
+  use_intrinsics: true  # Use actual intrinsics from data if available
+
+  # Data augmentation (conservative for real-world data)
+  augmentation:
+    enabled: true
+    brightness: 0.1
+    contrast: 0.1
+    saturation: 0.1
+    hue: 0.05
+    # No geometric augmentation - waypoints would need adjustment
+
+  # Waypoint configuration
+  num_waypoints: 11
+  waypoint_spacing_s: 0.25
+
+  # DataLoader settings
+  num_workers: 8
+  pin_memory: true
+  prefetch_factor: 4
+  persistent_workers: true
+
+loss:
+  # Waypoint loss (primary)
+  waypoint_loss: smooth_l1  # or 'mdn' for mixture density network
+  waypoint_weight: 1.0
+
+  # Route loss
+  route_loss: smooth_l1
+  route_weight: 0.5
+
+  # Language loss (optional, for meta-actions)
+  language_loss: cross_entropy
+  language_weight: 0.0  # Set to 1.0 when using language labels
+
+# MDN (Mixture Density Network) settings for multimodal waypoint prediction
+mdn:
+  enabled: false  # Set to true to use MDN instead of direct regression
+  n_mixtures: 5   # Number of Gaussian components
+  min_sigma: 0.01 # Minimum std dev to prevent collapse
+  input_dim: 896  # Hidden dim from model (InternVL2-1B uses 896)
+
+wandb:
+  project: "simlingo-nvidia-finetune"
+  entity: null  # Will use default entity
+  log_interval: 10
+  save_artifacts: true            # Upload LoRA checkpoints as W&B artifacts
+  log_gradients: false            # Set true to track per-param grad norms (slow)
+  watch_model: false              # wandb.watch can balloon log volume on DDP
+  log_predictions_every: 250      # Push BEV + camera projection viz every N steps
+  log_system_metrics: true        # CPU/GPU/mem utilization (Modal nodes)
+
+# HuggingFace Hub settings — final + best LoRA weights are uploaded at end of
+# training. Repo is auto-created if it doesn't exist. Override repo_id at the
+# CLI with `--hf-repo <repo>` to avoid editing this file.
+hub:
+  push_to_hub: true
+  repo_id: "markmusic/simlingo-nvidia"
+  private: true
+  push_best_checkpoint: true   # Also push best-val checkpoint, not just final
+  push_training_state: false   # Optimizer/scheduler state is too large for HF
+
+# Distributed training settings
+distributed:
+  strategy: ddp  # or fsdp for larger models
+  find_unused_parameters: false
+
+# Seed for reproducibility
+seed: 42
